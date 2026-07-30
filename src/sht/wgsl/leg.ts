@@ -74,11 +74,20 @@ fn leg_synth(@builtin(global_invocation_id) gid: vec3u,
     }
     if (l + 2u > LMAX) { break; }
     let c0 = ab[base + (l + 2u - m)];
-    y0 = c0.x * ct * y1 + c0.y * y0;
+    var c1 = vec2f(0.0);
     if (l + 3u <= LMAX) {
-      let c1 = ab[base + (l + 3u - m)];
-      y1 = c1.x * ct * y0 + c1.y * y1;
+      c1 = ab[base + (l + 3u - m)];
     }
+    // Route the new y0 through an explicit temporary, exactly as leg_analys
+    // does, rather than assigning y0 and reading it back on the next line:
+    // NVIDIA's WGSL compiler schedules the y1 update against the OLD y0 there,
+    // which lags the recurrence by one step and silently corrupts synthesis on
+    // hardware (it is correct under SwiftShader, so CI never saw it).
+    // Mirrors concept-collection/shtns-webgpu#1; this file is a vendored copy
+    // of that library's src/wgsl/leg.ts, so the fix has to be made in both.
+    let t0 = c0.x * ct * y1 + c0.y * y0;
+    y1 = c1.x * ct * t0 + c1.y * y1;
+    y0 = t0;
     l += 2u;
   }
   fm[m * NLAT + ilat] = acc;
